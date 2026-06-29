@@ -2243,6 +2243,92 @@ def health():
         "mode": "webhook" if (WEBHOOK_URL and validate_webhook_secret(request) is not False) else "polling"
     }), 200
 
+# ─── USERBOT (TELETHON) INTEGRATION ───────────────────────────────────
+import sqlite3
+import asyncio
+
+USERBOT_API_ID = 37593868
+USERBOT_API_HASH = "f66d341a320b19d10e3b53c1408c1f29"
+userbot_client = None
+
+def init_telethon_session():
+    auth_key_hex = os.getenv("USERBOT_AUTH_KEY_HEX")
+    dc_id = os.getenv("USERBOT_DC_ID")
+    port = os.getenv("USERBOT_PORT")
+    server_address = os.getenv("USERBOT_SERVER_ADDRESS")
+
+    if not auth_key_hex or not dc_id or not port or not server_address:
+        logger.info("Userbot muhit o'zgaruvchilari sozlanmagan. Userbot o'tkazib yuborildi.")
+        return False
+
+    server_address = server_address.strip('"\'')
+    session_file = "userbot.session"
+    
+    try:
+        conn = sqlite3.connect(session_file)
+        c = conn.cursor()
+        c.execute("CREATE TABLE IF NOT EXISTS version (version INTEGER)")
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                dc_id INTEGER PRIMARY KEY,
+                server_address TEXT,
+                port INTEGER,
+                auth_key BLOB,
+                takeout_id INTEGER
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS entities (
+                id INTEGER PRIMARY KEY,
+                hash INTEGER,
+                username TEXT,
+                phone TEXT,
+                name TEXT
+            )
+        """)
+        c.execute("DELETE FROM version")
+        c.execute("INSERT INTO version VALUES (7)")
+        auth_key_bytes = bytes.fromhex(auth_key_hex)
+        c.execute("DELETE FROM sessions")
+        c.execute("INSERT INTO sessions VALUES (?, ?, ?, ?, NULL)", 
+                  (int(dc_id), server_address, int(port), auth_key_bytes))
+        conn.commit()
+        conn.close()
+        logger.info("Telethon session fayli 'userbot.session' muvaffaqiyatli yaratildi!")
+        return True
+    except Exception as e:
+        logger.error("Telethon session yaratishda xatolik: %s", e)
+        return False
+
+def start_userbot_thread():
+    global userbot_client
+    if not init_telethon_session():
+        return
+        
+    try:
+        from telethon import TelegramClient, events
+        userbot_client = TelegramClient("userbot", USERBOT_API_ID, USERBOT_API_HASH)
+        
+        @userbot_client.on(events.NewMessage(pattern='/userbot_ping'))
+        async def handler(event):
+            await event.respond("Userbot Render-da faol! 🚀")
+            
+        async def run_client():
+            logger.info("Telethon Userbot Render-da ishga tushmoqda...")
+            await userbot_client.start()
+            logger.info("✅ Telethon Userbot muvaffaqiyatli ishga tushdi va Render-da ulandi!")
+            await userbot_client.run_until_disconnected()
+            
+        def loop_thread():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(run_client())
+            
+        t = threading.Thread(target=loop_thread, daemon=True)
+        t.start()
+    except Exception as e:
+        logger.error("Telethon Userbot-ni ishga tushirishda xatolik: %s", e)
+
 # ─── STARTUP ─────────────────────────────────────────────────────────
 
 def setup_webhook():
@@ -2296,6 +2382,9 @@ def initialize_app():
 
     # Start backup scheduler thread
     threading.Thread(target=backup_scheduler_loop, daemon=True).start()
+
+    # Start Telethon Userbot thread
+    start_userbot_thread()
 
 # Run initialization when imported (e.g. by gunicorn)
 initialize_app()
