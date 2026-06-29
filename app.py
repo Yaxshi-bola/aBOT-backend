@@ -2330,6 +2330,22 @@ def init_telethon_session():
 
 def start_userbot_thread():
     global userbot_client, userbot_init_error, userbot_start_error
+    
+    # Try to acquire an exclusive lock to prevent multiple Gunicorn workers from starting Telethon
+    try:
+        import fcntl
+        # Keep a reference to the file object so it doesn't get garbage collected and unlocked
+        global _userbot_lock_file
+        _userbot_lock_file = open("userbot.lock", "w")
+        fcntl.flock(_userbot_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logger.info("Userbot lock acquired. Starting Userbot in this process.")
+    except (BlockingIOError, PermissionError):
+        logger.info("Userbot is already running in another process/worker. Skipping.")
+        return
+    except Exception as e:
+        logger.error("Failed to acquire Userbot lock: %s", e)
+        return
+
     if not init_telethon_session():
         return
         
@@ -2420,8 +2436,18 @@ def initialize_app():
         except Exception:
             pass
 
-    # Start backup scheduler thread
-    threading.Thread(target=backup_scheduler_loop, daemon=True).start()
+    # Start backup scheduler thread (only in one worker)
+    try:
+        import fcntl
+        global _backup_lock_file
+        _backup_lock_file = open("backup.lock", "w")
+        fcntl.flock(_backup_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        threading.Thread(target=backup_scheduler_loop, daemon=True).start()
+        logger.info("Backup scheduler started in this process.")
+    except (BlockingIOError, PermissionError):
+        logger.info("Backup scheduler already running in another process. Skipping.")
+    except Exception as e:
+        logger.error("Failed to start backup scheduler: %s", e)
 
     # Start Telethon Userbot thread
     start_userbot_thread()
