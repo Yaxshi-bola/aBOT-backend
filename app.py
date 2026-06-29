@@ -293,23 +293,56 @@ def perform_database_backup(admin_id_to_notify=None):
 
 def run_daily_backup():
     try:
-        last_backup_file = "last_backup.txt"
-        now = time.time()
+        now = int(time.time())
         should_backup = False
-        if not os.path.exists(last_backup_file):
-            should_backup = True
-        else:
-            with open(last_backup_file, "r") as f:
-                last_time = float(f.read().strip() or 0)
-            if now - last_time >= 86400:
-                should_backup = True
+        last_time = 0
         
+        # Query Supabase for the system backup row (telegram_id = 1)
+        try:
+            system_user = db_select("users", {"telegram_id": "eq.1"})
+            if not system_user:
+                # Create the system row
+                db_insert("users", {
+                    "telegram_id": 1,
+                    "first_name": "System",
+                    "last_name": "Backup",
+                    "points": 0,
+                    "is_active": False
+                })
+                should_backup = True
+            else:
+                last_time = system_user[0].get("points", 0) or 0
+                if now - last_time >= 86400: # 24 hours
+                    should_backup = True
+        except Exception as db_err:
+            logger.warning("Failed to check backup status in DB, falling back to local file: %s", db_err)
+            # Fallback to local file if DB fails
+            last_backup_file = "last_backup.txt"
+            if not os.path.exists(last_backup_file):
+                should_backup = True
+            else:
+                with open(last_backup_file, "r") as f:
+                    last_time = float(f.read().strip() or 0)
+                if now - last_time >= 86400:
+                    should_backup = True
+
         if should_backup:
             logger.info("Avtomatik kunlik backup boshlanmoqda...")
             if ADMIN_IDS:
-                perform_database_backup(ADMIN_IDS[0])
-            with open(last_backup_file, "w") as f:
-                f.write(str(now))
+                success, filename = perform_database_backup(ADMIN_IDS[0])
+                if success:
+                    # Update the timestamp in Supabase
+                    try:
+                        db_update("users", {"points": now}, {"telegram_id": "eq.1"})
+                    except Exception as db_err:
+                        logger.error("Failed to update backup timestamp in DB: %s", db_err)
+                    
+                    # Update local fallback file
+                    try:
+                        with open("last_backup.txt", "w") as f:
+                            f.write(str(now))
+                    except Exception:
+                        pass
     except Exception:
         logger.exception("Error in daily backup scheduler")
 
