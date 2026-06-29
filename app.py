@@ -2275,9 +2275,7 @@ def start_polling_thread():
     t.start()
     return t
 
-if __name__ == '__main__':
-    port = int(os.getenv("PORT", "5000"))
-
+def initialize_app():
     # Webhook yoki polling rejimini tanlash
     if WEBHOOK_URL:
         if setup_webhook():
@@ -2299,4 +2297,9 @@ if __name__ == '__main__':
     # Start backup scheduler thread
     threading.Thread(target=backup_scheduler_loop, daemon=True).start()
 
+# Run initialization when imported (e.g. by gunicorn)
+initialize_app()
+
+if __name__ == '__main__':
+    port = int(os.getenv("PORT", "5000"))
     app.run(host='0.0.0.0', port=port, debug=False)
