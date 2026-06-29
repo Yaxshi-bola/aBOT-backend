@@ -2240,12 +2240,12 @@ def health():
     return jsonify({
         "ok": True,
         "ts": time.time(),
-        "mode": "webhook" if (WEBHOOK_URL and validate_webhook_secret(request) is not False) else "polling"
-    }), 200
+userbot_init_error = None
+userbot_start_error = None
 
 @app.route('/api/debug/userbot', methods=['GET'])
 def api_debug_userbot():
-    global userbot_client
+    global userbot_client, userbot_init_error, userbot_start_error
     status = {
         "env_present": {
             "auth_key": bool(os.getenv("USERBOT_AUTH_KEY_HEX")),
@@ -2254,14 +2254,17 @@ def api_debug_userbot():
             "server_address": bool(os.getenv("USERBOT_SERVER_ADDRESS"))
         },
         "client_initialized": userbot_client is not None,
+        "init_error": userbot_init_error,
+        "start_error": userbot_start_error
     }
     if userbot_client:
         try:
             status["is_connected"] = userbot_client.is_connected()
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            me = loop.run_until_complete(userbot_client.get_me())
-            status["me"] = f"{me.first_name} (@{me.username})" if me else "None"
+            if userbot_client.is_connected():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                me = loop.run_until_complete(userbot_client.get_me())
+                status["me"] = f"{me.first_name} (@{me.username})" if me else "None"
         except Exception as e:
             status["error"] = str(e)
     return jsonify(status), 200
@@ -2275,6 +2278,7 @@ USERBOT_API_HASH = "f66d341a320b19d10e3b53c1408c1f29"
 userbot_client = None
 
 def init_telethon_session():
+    global userbot_init_error
     auth_key_hex = os.getenv("USERBOT_AUTH_KEY_HEX")
     dc_id = os.getenv("USERBOT_DC_ID")
     port = os.getenv("USERBOT_PORT")
@@ -2320,11 +2324,12 @@ def init_telethon_session():
         logger.info("Telethon session fayli 'userbot.session' muvaffaqiyatli yaratildi!")
         return True
     except Exception as e:
+        userbot_init_error = f"Session init error: {str(e)}"
         logger.error("Telethon session yaratishda xatolik: %s", e)
         return False
 
 def start_userbot_thread():
-    global userbot_client
+    global userbot_client, userbot_init_error, userbot_start_error
     if not init_telethon_session():
         return
         
@@ -2337,10 +2342,19 @@ def start_userbot_thread():
             await event.respond("Userbot Render-da faol! 🚀")
             
         async def run_client():
+            global userbot_start_error
             logger.info("Telethon Userbot Render-da ishga tushmoqda...")
-            await userbot_client.start()
-            logger.info("✅ Telethon Userbot muvaffaqiyatli ishga tushdi va Render-da ulandi!")
-            await userbot_client.run_until_disconnected()
+            try:
+                await userbot_client.connect()
+                if not await userbot_client.is_user_authorized():
+                    userbot_start_error = "Session is NOT authorized! Telegram rejected the session."
+                    logger.error("Userbot session is not authorized!")
+                else:
+                    logger.info("✅ Telethon Userbot muvaffaqiyatli ishga tushdi va Render-da ulandi!")
+                    await userbot_client.run_until_disconnected()
+            except Exception as e:
+                userbot_start_error = f"Run client error: {str(e)}"
+                logger.error("Error in run_client: %s", e)
             
         def loop_thread():
             loop = asyncio.new_event_loop()
@@ -2350,6 +2364,7 @@ def start_userbot_thread():
         t = threading.Thread(target=loop_thread, daemon=True)
         t.start()
     except Exception as e:
+        userbot_init_error = f"Thread start error: {str(e)}"
         logger.error("Telethon Userbot-ni ishga tushirishda xatolik: %s", e)
 
 # ─── STARTUP ─────────────────────────────────────────────────────────
