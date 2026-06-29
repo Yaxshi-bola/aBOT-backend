@@ -2243,6 +2243,29 @@ def health():
         "mode": "webhook" if (WEBHOOK_URL and validate_webhook_secret(request) is not False) else "polling"
     }), 200
 
+@app.route('/api/debug/userbot', methods=['GET'])
+def api_debug_userbot():
+    global userbot_client
+    status = {
+        "env_present": {
+            "auth_key": bool(os.getenv("USERBOT_AUTH_KEY_HEX")),
+            "dc_id": bool(os.getenv("USERBOT_DC_ID")),
+            "port": bool(os.getenv("USERBOT_PORT")),
+            "server_address": bool(os.getenv("USERBOT_SERVER_ADDRESS"))
+        },
+        "client_initialized": userbot_client is not None,
+    }
+    if userbot_client:
+        try:
+            status["is_connected"] = userbot_client.is_connected()
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            me = loop.run_until_complete(userbot_client.get_me())
+            status["me"] = f"{me.first_name} (@{me.username})" if me else "None"
+        except Exception as e:
+            status["error"] = str(e)
+    return jsonify(status), 200
+
 # ─── USERBOT (TELETHON) INTEGRATION ───────────────────────────────────
 import sqlite3
 import asyncio
