@@ -2240,6 +2240,9 @@ def health():
     return jsonify({
         "ok": True,
         "ts": time.time(),
+        "mode": "webhook" if (WEBHOOK_URL and validate_webhook_secret(request) is not False) else "polling"
+    }), 200
+
 userbot_init_error = None
 userbot_start_error = None
 
