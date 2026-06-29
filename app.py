@@ -2335,16 +2335,18 @@ def start_userbot_thread():
         
     try:
         from telethon import TelegramClient, events
-        userbot_client = TelegramClient("userbot", USERBOT_API_ID, USERBOT_API_HASH)
         
-        @userbot_client.on(events.NewMessage(pattern='/userbot_ping'))
-        async def handler(event):
-            await event.respond("Userbot Render-da faol! 🚀")
-            
         async def run_client():
-            global userbot_start_error
+            global userbot_client, userbot_start_error
             logger.info("Telethon Userbot Render-da ishga tushmoqda...")
             try:
+                # Create the client inside the thread's event loop
+                userbot_client = TelegramClient("userbot", USERBOT_API_ID, USERBOT_API_HASH)
+                
+                @userbot_client.on(events.NewMessage(pattern='/userbot_ping'))
+                async def handler(event):
+                    await event.respond("Userbot Render-da faol! 🚀")
+                    
                 await userbot_client.connect()
                 if not await userbot_client.is_user_authorized():
                     userbot_start_error = "Session is NOT authorized! Telegram rejected the session."
