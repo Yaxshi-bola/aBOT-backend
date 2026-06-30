@@ -37,6 +37,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global list for tracking recent error tracebacks for remote debugging
+RECENT_ERRORS = []
+
 # ─── ENV VALIDATION ──────────────────────────────────────────────────
 required_envs = [
     "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHANNEL_ID",
@@ -1627,9 +1630,22 @@ def api_delete_redemption():
         # Delete from DB
         db_delete("redemptions", "id", redemption_id)
         return jsonify({"success": True})
-    except Exception:
+    except Exception as e:
+        import traceback
+        err_msg = traceback.format_exc()
         logger.exception("Error in /api/my-redemptions/delete")
+        RECENT_ERRORS.append({
+            "timestamp": time.time(),
+            "error": str(e),
+            "traceback": err_msg
+        })
+        if len(RECENT_ERRORS) > 20:
+            RECENT_ERRORS.pop(0)
         return jsonify({"success": False, "error": "Server xatosi"}), 500
+
+@app.route('/api/debug/errors', methods=['GET'])
+def api_debug_errors():
+    return jsonify({"success": True, "errors": RECENT_ERRORS})
 
 # ─── PRO LINK (Asosiy ekrandagi "Pro olish" tugmasi uchun) ───────────
 
