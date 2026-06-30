@@ -1616,7 +1616,7 @@ def api_delete_redemption():
         tid = user_data["id"]
         
         # Fetch redemption
-        redemptions = db_select("redemptions", {"id": redemption_id})
+        redemptions = db_select("redemptions", {"id": "eq." + str(redemption_id)})
         if not redemptions:
             return jsonify({"success": False, "error": "Buyurtma topilmadi"}), 404
             
