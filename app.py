@@ -1612,8 +1612,8 @@ def api_delete_redemption():
         if not init_data or not redemption_id:
             return jsonify({"success": False, "error": "Ma'lumotlar yetarli emas"}), 400
             
-        is_valid, user_data = verify_telegram_init_data(init_data, WEBHOOK_SECRET)
-        if not is_valid:
+        user_data = validate_init_data(init_data)
+        if not user_data:
             return jsonify({"success": False, "error": "Ruxsat berilmagan"}), 401
             
         tid = user_data["id"]
