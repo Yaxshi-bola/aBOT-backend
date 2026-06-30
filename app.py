@@ -1645,6 +1645,9 @@ def api_delete_redemption():
 
 @app.route('/api/debug/errors', methods=['GET'])
 def api_debug_errors():
+    secret = request.headers.get("X-Admin-Secret") or request.args.get("secret")
+    if not secret or secret != ADMIN_SECRET:
+        return jsonify({"success": False, "error": "Ruxsat berilmagan"}), 401
     return jsonify({"success": True, "errors": RECENT_ERRORS})
 
 # ─── PRO LINK (Asosiy ekrandagi "Pro olish" tugmasi uchun) ───────────
@@ -2346,6 +2349,9 @@ userbot_start_error = None
 
 @app.route('/api/debug/userbot', methods=['GET'])
 def api_debug_userbot():
+    secret = request.headers.get("X-Admin-Secret") or request.args.get("secret")
+    if not secret or secret != ADMIN_SECRET:
+        return jsonify({"success": False, "error": "Ruxsat berilmagan"}), 401
     global userbot_client, userbot_init_error, userbot_start_error
     status = {
         "env_present": {
