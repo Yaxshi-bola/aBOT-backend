@@ -1,0 +1,17 @@
+name: Daily Database Backup
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Har kuni UTC vaqti bilan 00:00 da ishlaydi (Toshkent vaqti bilan 05:00)
+  workflow_dispatch:      # GitHub-dan qo'lda ham ishga tushirish imkoniyati
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Backup API
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Admin-Secret: 7382d6e9f1a2b3c4d5e6f7a8b9c0d1e2" \
+            https://abot-backend-mgg9.onrender.com/api/admin/backup

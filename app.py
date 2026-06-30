@@ -2252,12 +2252,27 @@ def api_admin_user_transactions():
 def api_admin_backup():
     if request.method == 'OPTIONS': return '', 200
     data = request.json or {}
-    user_info = validate_init_data(data.get("init_data"))
-    if not user_info or not is_user_admin(user_info.get("id")):
+    
+    # Allow authentication via X-Admin-Secret header (e.g., for GitHub Actions)
+    secret_header = request.headers.get("X-Admin-Secret")
+    is_authorized = False
+    target_admin_id = None
+    
+    if secret_header and secret_header == ADMIN_SECRET:
+        is_authorized = True
+        if ADMIN_IDS:
+            target_admin_id = ADMIN_IDS[0]
+    else:
+        user_info = validate_init_data(data.get("init_data"))
+        if user_info and is_user_admin(user_info.get("id")):
+            is_authorized = True
+            target_admin_id = user_info.get("id")
+            
+    if not is_authorized or not target_admin_id:
         return jsonify({"success": False, "error": "Taqiqlangan"}), 403
         
     try:
-        success, res = perform_database_backup(user_info.get("id"))
+        success, res = perform_database_backup(target_admin_id)
         if success:
             return jsonify({"success": True, "message": f"Zaxira nusxasi muvaffaqiyatli olindi va sizga Telegram orqali yuborildi. Fayl: {res}"})
         else:
