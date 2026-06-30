@@ -2107,17 +2107,122 @@ def api_admin_user_search():
             
         if is_num:
             params = {
-                "or": f"(telegram_id.eq.{query},username.ilike.*{query}*,first_name.ilike.*{query}*)"
+                "or": f"(telegram_id.eq.{query},username.ilike.*{query}*,first_name.ilike.*{query}*)",
+                "limit": 30
             }
         else:
             params = {
-                "or": f"(username.ilike.*{query}*,first_name.ilike.*{query}*)"
+                "or": f"(username.ilike.*{query}*,first_name.ilike.*{query}*)",
+                "limit": 30
             }
             
         users = db_select("users", params)
         return jsonify({"success": True, "users": users or []})
     except Exception:
         logger.exception("Error searching users")
+        return jsonify({"success": False, "error": "Server xatosi"}), 500
+
+@app.route('/api/admin/redemptions', methods=['POST', 'OPTIONS'])
+def api_admin_get_redemptions():
+    if request.method == 'OPTIONS': return '', 200
+    data = request.json or {}
+    user_info = validate_init_data(data.get("init_data"))
+    if not user_info or not is_user_admin(user_info.get("id")):
+        return jsonify({"success": False, "error": "Taqiqlangan"}), 403
+        
+    try:
+        # Fetch pending redemptions
+        params = {"status": "eq.pending", "order": "created_at.desc"}
+        redemptions = db_select("redemptions", params) or []
+        
+        if redemptions:
+            # Get unique user IDs
+            uids = list(set(str(r["user_id"]) for r in redemptions))
+            # Fetch users
+            users_list = db_select("users", {"telegram_id": "in.(" + ",".join(uids) + ")"}) or []
+            user_map = {str(u["telegram_id"]): u for u in users_list}
+            
+            # Join
+            for r in redemptions:
+                u = user_map.get(str(r["user_id"]))
+                r["user_name"] = u["first_name"] if u else "Noma'lum"
+                r["username"] = u["username"] if u else None
+        
+        return jsonify({"success": True, "redemptions": redemptions})
+    except Exception:
+        logger.exception("Error getting pending redemptions")
+        return jsonify({"success": False, "error": "Server xatosi"}), 500
+
+@app.route('/api/admin/redemptions/action', methods=['POST', 'OPTIONS'])
+def api_admin_redemption_action():
+    if request.method == 'OPTIONS': return '', 200
+    data = request.json or {}
+    user_info = validate_init_data(data.get("init_data"))
+    if not user_info or not is_user_admin(user_info.get("id")):
+        return jsonify({"success": False, "error": "Taqiqlangan"}), 403
+        
+    redemption_id = data.get("redemption_id")
+    action = data.get("action") # "approve" or "reject"
+    
+    if not redemption_id or action not in ["approve", "reject"]:
+        return jsonify({"success": False, "error": "Noto'g'ri ma'lumotlar"}), 400
+        
+    try:
+        # Fetch redemption
+        redemptions = db_select("redemptions", {"id": "eq." + str(redemption_id)})
+        if not redemptions:
+            return jsonify({"success": False, "error": "Ariza topilmadi"}), 404
+            
+        redemption = redemptions[0]
+        if redemption["status"] != "pending":
+            return jsonify({"success": False, "error": "Ushbu ariza allaqachon ko'rib chiqilgan"}), 400
+            
+        if action == "approve":
+            # Update status to approved
+            db_update("redemptions", {"status": "approved"}, "id", redemption_id)
+            
+            # Send Telegram notification
+            try:
+                msg = f"🎉 Tabriklaymiz! Sizning *{redemption.get('gift_name', 'sovg\\'a')}* uchun arizangiz tasdiqlandi va yetkazildi! ✅"
+                send_telegram_message(redemption["user_id"], msg, parse_mode="Markdown")
+            except Exception:
+                logger.exception("Failed to send approval notification")
+                
+        elif action == "reject":
+            # Update status to rejected
+            db_update("redemptions", {"status": "rejected"}, "id", redemption_id)
+            
+            # Refund points to user
+            user_id = redemption["user_id"]
+            points_spent = int(redemption.get("points_spent", 0))
+            
+            if points_spent > 0:
+                users = db_select("users", {"telegram_id": "eq." + str(user_id)})
+                if users:
+                    user = users[0]
+                    new_points = int(user["points"]) + points_spent
+                    db_update("users", {"points": new_points}, "telegram_id", user_id)
+                    
+                    # Log transaction
+                    db_insert("transactions", {
+                        "user_id": user_id,
+                        "amount": points_spent,
+                        "type": "refund",
+                        "description": f"Rad etilgan sovg'a uchun qaytarilgan ballar: {redemption.get('gift_name')}"
+                    })
+                    
+            # Send Telegram notification
+            try:
+                reason = data.get("reason", "").strip()
+                reason_str = f"\nSababi: {reason}" if reason else ""
+                msg = f"❌ Afsuski, sizning *{redemption.get('gift_name', 'sovg\\'a')}* uchun arizangiz rad etildi.{reason_str}\n\n🪙 {points_spent} ball hisobingizga qaytarib berildi."
+                send_telegram_message(user_id, msg, parse_mode="Markdown")
+            except Exception:
+                logger.exception("Failed to send rejection notification")
+                
+        return jsonify({"success": True})
+    except Exception:
+        logger.exception("Error processing redemption action")
         return jsonify({"success": False, "error": "Server xatosi"}), 500
 
 @app.route('/api/admin/users/update', methods=['POST', 'OPTIONS'])
