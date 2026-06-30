@@ -1597,6 +1597,40 @@ def api_my_redemptions():
         logger.exception("Error in /api/my-redemptions")
         return jsonify({"success": False, "error": "Server xatosi"}), 500
 
+@app.route('/api/my-redemptions/delete', methods=['POST', 'OPTIONS'])
+def api_delete_redemption():
+    if request.method == 'OPTIONS':
+        return '', 200
+    try:
+        data = request.json or {}
+        init_data = data.get("init_data")
+        redemption_id = data.get("redemption_id")
+        
+        if not init_data or not redemption_id:
+            return jsonify({"success": False, "error": "Ma'lumotlar yetarli emas"}), 400
+            
+        is_valid, user_data = verify_telegram_init_data(init_data, WEBHOOK_SECRET)
+        if not is_valid:
+            return jsonify({"success": False, "error": "Ruxsat berilmagan"}), 401
+            
+        tid = user_data["id"]
+        
+        # Fetch redemption
+        redemptions = db_select("redemptions", {"id": redemption_id})
+        if not redemptions:
+            return jsonify({"success": False, "error": "Buyurtma topilmadi"}), 404
+            
+        redemption = redemptions[0]
+        if int(redemption["user_id"]) != int(tid):
+            return jsonify({"success": False, "error": "Sizda ushbu amal uchun huquq yo'q"}), 403
+            
+        # Delete from DB
+        db_delete("redemptions", "id", redemption_id)
+        return jsonify({"success": True})
+    except Exception:
+        logger.exception("Error in /api/my-redemptions/delete")
+        return jsonify({"success": False, "error": "Server xatosi"}), 500
+
 # ─── PRO LINK (Asosiy ekrandagi "Pro olish" tugmasi uchun) ───────────
 
 @app.route('/api/pro-link', methods=['POST', 'OPTIONS'])
