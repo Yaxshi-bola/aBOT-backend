@@ -88,6 +88,9 @@ def tg_send_message(chat_id, text, reply_markup=None):
         data["reply_markup"] = reply_markup
     return tg_api("sendMessage", data)
 
+def send_telegram_message(chat_id, text, parse_mode="HTML"):
+    return tg_api("sendMessage", {"chat_id": chat_id, "text": text, "parse_mode": parse_mode})
+
 import re
 
 def parse_telegram_message_link(link):
