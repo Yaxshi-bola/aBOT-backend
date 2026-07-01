@@ -836,7 +836,7 @@ def process_telegram_update(update):
             }
             welcome = (
                 "Assalomu alaykum, <b>%s</b>! 👋\n\n"
-                "🎁 <b>Hammaga Yetadi</b> ilovasidan foydalanish uchun avval rasmiy kanalimizga obuna bo'ling, "
+                "🎁 <b>Zuhra's Gifts</b> ilovasidan foydalanish uchun avval rasmiy kanalimizga obuna bo'ling, "
                 "so'ng <b>«Obunani tekshirish»</b> tugmasini bosing."
             ) % first_name
             tg_send_message(chat_id, welcome, subscribe_keyboard)
@@ -942,7 +942,7 @@ def handle_start(chat_id, user_id, username, first_name, last_name, text):
 
         welcome = (
             "Assalomu alaykum, <b>%s</b>! 👋\n\n"
-            "🎉 <b>Hammaga Yetadi</b> ilovasiga xush kelibsiz!\n\n"
+            "🎉 <b>Zuhra's Gifts</b> ilovasiga xush kelibsiz!\n\n"
             "🎁 Do'stlarni taklif qilib ball to'plang va sovg'alarga ega bo'ling!\n\n"
             "Boshlash uchun quyidagi tugmani bosing 👇"
         ) % first_name
