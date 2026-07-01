@@ -2230,7 +2230,8 @@ def api_admin_redemption_action():
             
             # Send Telegram notification
             try:
-                msg = f"🎉 Tabriklaymiz! Sizning *{redemption.get('gift_name', 'sovg\\'a')}* uchun arizangiz tasdiqlandi va yetkazildi! ✅"
+                gift_name = redemption.get("gift_name") or "sovg'a"
+                msg = f"🎉 Tabriklaymiz! Sizning *{gift_name}* uchun arizangiz tasdiqlandi va yetkazildi! ✅"
                 send_telegram_message(redemption["user_id"], msg, parse_mode="Markdown")
             except Exception:
                 logger.exception("Failed to send approval notification")
@@ -2262,7 +2263,8 @@ def api_admin_redemption_action():
             try:
                 reason = data.get("reason", "").strip()
                 reason_str = f"\nSababi: {reason}" if reason else ""
-                msg = f"❌ Afsuski, sizning *{redemption.get('gift_name', 'sovg\\'a')}* uchun arizangiz rad etildi.{reason_str}\n\n🪙 {points_spent} ball hisobingizga qaytarib berildi."
+                gift_name = redemption.get("gift_name") or "sovg'a"
+                msg = f"❌ Afsuski, sizning *{gift_name}* uchun arizangiz rad etildi.{reason_str}\n\n🪙 {points_spent} ball hisobingizga qaytarib berildi."
                 send_telegram_message(user_id, msg, parse_mode="Markdown")
             except Exception:
                 logger.exception("Failed to send rejection notification")
