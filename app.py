@@ -54,7 +54,7 @@ if missing_envs:
 # ─── CONFIG ──────────────────────────────────────────────────────────
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN
-CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
+# CHANNEL_ID is now fetched dynamically via get_channel_id()
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 APP_NAME = os.getenv("APP_NAME")
 MINI_APP_URL = os.getenv("MINI_APP_URL").rstrip("/")
@@ -159,7 +159,7 @@ def tg_check_member(user_id, bypass_cache=False):
 
     # 2. Check Telegram API
     try:
-        result = tg_api("getChatMember", {"chat_id": CHANNEL_ID, "user_id": user_id})
+        result = tg_api("getChatMember", {"chat_id": get_channel_id(), "user_id": user_id})
         if result.get("ok"):
             status = result["result"]["status"]
             is_member = status in ["creator", "administrator", "member"]
@@ -444,6 +444,18 @@ SETTINGS_FILE = "system_settings.json"
 settings_lock = threading.Lock()
 
 def get_system_setting(key, default=None):
+    try:
+        # Try fetching from DB first for persistence
+        res = db_select("users", {"telegram_id": "eq.2"})
+        if res and len(res) > 0:
+            settings_json = res[0].get("last_name")
+            if settings_json:
+                data = json.loads(settings_json)
+                if key in data:
+                    return data[key]
+    except Exception:
+        pass
+
     with settings_lock:
         if os.path.exists(SETTINGS_FILE):
             try:
@@ -455,6 +467,7 @@ def get_system_setting(key, default=None):
     return default
 
 def set_system_setting(key, value):
+    local_success = False
     with settings_lock:
         data = {}
         if os.path.exists(SETTINGS_FILE):
@@ -467,9 +480,40 @@ def set_system_setting(key, value):
         try:
             with open(SETTINGS_FILE, "w") as f:
                 json.dump(data, f)
-            return True
+            local_success = True
         except Exception:
-            return False
+            pass
+            
+    try:
+        res = db_select("users", {"telegram_id": "eq.2"})
+        current_data = {}
+        if res and len(res) > 0:
+            settings_json = res[0].get("last_name")
+            if settings_json:
+                try:
+                    current_data = json.loads(settings_json)
+                except Exception:
+                    pass
+        current_data[key] = value
+        updated_json = json.dumps(current_data)
+        
+        if not res:
+            db_insert("users", {
+                "telegram_id": 2,
+                "first_name": "system_settings",
+                "last_name": updated_json,
+                "points": 0,
+                "is_active": False
+            })
+        else:
+            db_update("users", {"last_name": updated_json}, "telegram_id", 2)
+        return True
+    except Exception:
+        logger.exception("Failed to sync system setting to DB")
+        return local_success
+
+def get_channel_id():
+    return get_system_setting("telegram_channel_id", os.getenv("TELEGRAM_CHANNEL_ID") or "")
 
 # ─── RATE LIMITER ────────────────────────────────────────────────────
 rate_limit_store = {}
@@ -506,7 +550,7 @@ def get_or_create_channel_invite_link(user_id):
         
         # Create a new invite link
         res = tg_api("createChatInviteLink", {
-            "chat_id": CHANNEL_ID,
+            "chat_id": get_channel_id(),
             "name": f"ref_{user_id}"
         })
         if res.get("ok"):
@@ -780,7 +824,7 @@ def process_telegram_update(update):
     if not is_admin:
         is_member = tg_check_member(user_id)
         if not is_member:
-            channel_url = "https://t.me/" + CHANNEL_ID.lstrip("@")
+            channel_url = "https://t.me/" + get_channel_id().lstrip("@")
             subscribe_keyboard = {
                 "inline_keyboard": [
                     [{"text": "📢 Kanalga obuna bo'lish", "url": channel_url, "style": "primary"}],
@@ -1248,7 +1292,7 @@ def api_auth():
             },
             "is_member": is_member,
             "is_admin": is_user_admin(tid),
-            "channel_url": "https://t.me/" + CHANNEL_ID.lstrip("@"),
+            "channel_url": "https://t.me/" + get_channel_id().lstrip("@"),
             "referral_link": get_or_create_channel_invite_link(tid) or ("https://t.me/%s/%s?startapp=r_%s" % (BOT_USERNAME, APP_NAME, tid)),
             "has_pro_link": bool(get_system_setting("pro_link", PRO_LINK))
         })
@@ -2318,7 +2362,8 @@ def api_admin_get_settings():
     return jsonify({
         "success": True,
         "settings": {
-            "pro_link": get_system_setting("pro_link", PRO_LINK)
+            "pro_link": get_system_setting("pro_link", PRO_LINK),
+            "telegram_channel_id": get_channel_id()
         }
     })
 
@@ -2334,6 +2379,8 @@ def api_admin_update_settings():
     new_settings = data.get("settings", {})
     if "pro_link" in new_settings:
         set_system_setting("pro_link", new_settings["pro_link"].strip())
+    if "telegram_channel_id" in new_settings:
+        set_system_setting("telegram_channel_id", new_settings["telegram_channel_id"].strip())
         
     return jsonify({
         "success": True,
